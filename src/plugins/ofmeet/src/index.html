@@ -25,15 +25,12 @@
     <script src="libs/strophe/strophe.jingle.sessionbase.js?v=1"></script>
     <script src="libs/strophe/strophe.jingle.session.js?v=2"></script>
     <script src="libs/strophe/strophe.util.js"></script>
-    <script src="libs/colibri/colibri.focus.js?v=12"></script><!-- colibri focus implementation -->
-    <script src="libs/colibri/colibri.session.js?v=1"></script>
     <script src="libs/jquery-ui.js"></script>
     <script src="libs/rayo.js?v=1"></script>
     <script src="libs/tooltip.js?v=1"></script><!-- bootstrap tooltip lib -->
     <script src="libs/popover.js?v=1"></script><!-- bootstrap tooltip lib -->
     <script src="libs/pako.bundle.js?v=1"></script><!-- zlib deflate -->
     <script src="libs/toastr.js?v=1"></script><!-- notifications lib -->
-    <script src="interface_config.js?v=4"></script>
     <script src="muc.js?v=17"></script><!-- simple MUC library -->
     <script src="ofmuc.js?v=1"></script><!-- BAO -->
     <script src="estos_log.js?v=2"></script><!-- simple stanza logger -->
@@ -50,7 +47,6 @@
     <script src="smileys.js?v=3"></script><!-- smiley images -->
     <script src="replacement.js?v=7"></script><!-- link and smiley replacement -->
     <script src="moderatemuc.js?v=4"></script><!-- moderator plugin -->
-    <!--script src="analytics.js?v=1"></script--><!-- google analytics plugin -->
     <script src="rtp_sts.js?v=5"></script><!-- RTP stats processing -->
     <script src="local_sts.js?v=2"></script><!-- Local stats processing -->
     <script src="videolayout.js?v=31"></script><!-- video ui -->
@@ -70,12 +66,13 @@
     <script src="message_handler.js?v=2"></script>
     <script src="api_connector.js?v=2"></script>
     <script src="settings_menu.js?v=1"></script>
+    <script src="lz-string.js?v=1"></script>
     <script src="avatar.js?v=4"></script><!-- avatars -->
     <link rel="stylesheet" href="css/font.css?v=6"/>
     <link rel="stylesheet" href="css/toastr.css?v=1">
     <link rel="stylesheet" type="text/css" media="screen" href="css/main.css?v=30"/>
     <link rel="stylesheet" type="text/css" media="screen" href="css/videolayout_default.css?v=16" id="videolayout_default"/>
-    <link href="//netdna.bootstrapcdn.com/font-awesome/4.0.3/css/font-awesome.css" rel="stylesheet">
+    <link href="apps/font-awesome-4.0.3/css/font-awesome.css" rel="stylesheet">
     <link rel="stylesheet" href="css/jquery-impromptu.css?v=4">
     <link rel="stylesheet" href="css/modaldialog.css?v=3">
     <link rel="stylesheet" href="css/popup_menu.css?v=4">
@@ -118,7 +115,7 @@
             <div id="brand_header"></div>
             <input type='checkbox' name='checkbox' id="disable_welcome"/>
             <label for="disable_welcome" class="disable_welcome_position">Don't show this page next time I enter</label>
-            <div id="header_text"></div>
+            <div id="header_text"><input id="register_protocol_button" type="button" value="Register web+meet" /><input id="unregister_protocol_button" type="button" value="Unregister web+meet" /></div>
         </div>
         <div id="welcome_page_main">
             <div id="features">
@@ -216,10 +213,16 @@
                             <i class="icon-prezi"></i>
                         </a>
                     </span>
-                    <span id="prezi_button"><!-- BAO -->
+                    <span id="pdf_button"><!-- BAO -->
                         <div class="header_button_separator"></div>
                         <a class="button" data-container="body" data-toggle="popover" data-placement="bottom" content="Share PDF" onclick='connection.ofmuc.openPDFDialog();'>
                             <i class="icon-prezi"></i>
+                        </a>
+                    </span>
+                    <span id="appsButton"><!-- BAO -->
+                        <div class="header_button_separator"></div>
+                        <a class="button" data-container="body" data-toggle="popover" data-placement="bottom" content="Shared Application" onclick='connection.ofmuc.openAppsDialog();'>
+                            <i class="icon-share-doc"></i>
                         </a>
                     </span>
                     <span id="etherpadButton">

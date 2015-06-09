@@ -49,7 +49,7 @@ import org.eclipse.jetty.server.handler.HandlerCollection;
 import org.eclipse.jetty.servlet.FilterHolder;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
-import org.eclipse.jetty.servlets.GzipFilter;
+import org.eclipse.jetty.servlets.AsyncGzipFilter;
 import org.eclipse.jetty.spdy.server.http.HTTPSPDYServerConnector;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
@@ -88,6 +88,8 @@ public final class HttpBindManager {
 
     public static final String HTTP_BIND_THREADS = "httpbind.client.processing.threads";
 
+    public static final String HTTP_BIND_AUTH_PER_CLIENTCERT_POLICY = "httpbind.client.cert.policy";
+
     public static final int HTTP_BIND_THREADS_DEFAULT = 8;
 
 	private static final String HTTP_BIND_FORWARDED = "httpbind.forwarded.enabled";
@@ -116,15 +118,19 @@ public final class HttpBindManager {
 
     public static final String HTTP_BIND_CORS_MAX_AGE_DEFAULT = "86400";
 
+    public static final String HTTP_BIND_REQUEST_HEADER_SIZE = "httpbind.request.header.size";
+
+    public static final int HTTP_BIND_REQUEST_HEADER_SIZE_DEFAULT = 32768;
+
     public static Map<String, Boolean> HTTP_BIND_ALLOWED_ORIGINS = new HashMap<String, Boolean>();
 
     private static HttpBindManager instance = new HttpBindManager();
-    
-    // Compression "disabled" by default; use "optional" to enable compression (restart required)
-    // When enabled, http response will be compressed if the http request includes an 
+
+    // Compression "optional" by default; use "disabled" to disable compression (restart required)
+    // When enabled, http response will be compressed if the http request includes an
     // "Accept" header with a value of "gzip" and/or "deflate"
     private static boolean isCompressionEnabled = !(JiveGlobals.getProperty(
-    		ConnectionSettings.Server.COMPRESSION_SETTINGS, Connection.CompressionPolicy.disabled.toString())
+    		ConnectionSettings.Client.COMPRESSION_SETTINGS, Connection.CompressionPolicy.optional.toString())
             .equalsIgnoreCase(Connection.CompressionPolicy.disabled.toString()));
 
     private Server httpBindServer;
@@ -164,9 +170,12 @@ public final class HttpBindManager {
         JiveGlobals.migrateProperty(HTTP_BIND_FORWARDED_HOST_NAME);
         JiveGlobals.migrateProperty(HTTP_BIND_CORS_ENABLED);
         JiveGlobals.migrateProperty(HTTP_BIND_CORS_ALLOW_ORIGIN);
+        JiveGlobals.migrateProperty(HTTP_BIND_REQUEST_HEADER_SIZE);
 
         PropertyEventDispatcher.addListener(new HttpServerPropertyListener());
         this.httpSessionManager = new HttpSessionManager();
+
+        // we need to initialise contexts at constructor time in order for plugins to add their contexts before start()
         contexts = new ContextHandlerCollection();
 
         // setup the cache for the allowed origins
@@ -186,6 +195,7 @@ public final class HttpBindManager {
 
         try {
             httpBindServer.start();
+            Log.info("HTTP bind service started");
         }
         catch (Exception e) {
             Log.error("Error starting HTTP bind service", e);
@@ -198,10 +208,12 @@ public final class HttpBindManager {
         if (httpBindServer != null) {
             try {
                 httpBindServer.stop();
+                Log.info("HTTP bind service stopped");
             }
             catch (Exception e) {
-                Log.error("Error stoping HTTP bind service", e);
+                Log.error("Error stopping HTTP bind service", e);
             }
+            httpBindServer = null;
         }
     }
 
@@ -218,7 +230,7 @@ public final class HttpBindManager {
         if (port > 0) {
 			HttpConfiguration httpConfig = new HttpConfiguration();
 			configureProxiedConnector(httpConfig);
-            ServerConnector connector = new ServerConnector(httpBindServer, null, null, null, -1, bindThreads, 
+            ServerConnector connector = new ServerConnector(httpBindServer, null, null, null, -1, bindThreads,
             		new HttpConnectionFactory(httpConfig));
 
             // Listen on a specific network interface if it has been set.
@@ -240,6 +252,7 @@ public final class HttpBindManager {
 
                 final SslContextFactory sslContextFactory = new SslContextFactory();
                 sslContextFactory.addExcludeProtocols("SSLv3");
+                sslContextFactory.setTrustStorePath(SSLConfig.getc2sTruststoreLocation());
                 sslContextFactory.setTrustStorePassword(SSLConfig.getc2sTrustPassword());
                 sslContextFactory.setTrustStoreType(SSLConfig.getStoreType());
                 sslContextFactory.setKeyStorePath(SSLConfig.getKeystoreLocation());
@@ -247,7 +260,7 @@ public final class HttpBindManager {
                 sslContextFactory.setKeyStoreType(SSLConfig.getStoreType());
 
                 // Set policy for checking client certificates
-                String certPol = JiveGlobals.getProperty("xmpp.client.cert.policy", "disabled");
+                String certPol = JiveGlobals.getProperty(HTTP_BIND_AUTH_PER_CLIENTCERT_POLICY, "disabled");
                 if(certPol.equals("needed")) {
                 	sslContextFactory.setNeedClientAuth(true);
                 	sslContextFactory.setWantClientAuth(true);
@@ -272,8 +285,8 @@ public final class HttpBindManager {
 					sslConnector = new HTTPSPDYServerConnector(httpBindServer, sslContextFactory);
 				} else {
 
-					sslConnector = new ServerConnector(httpBindServer, null, null, null, -1, bindThreads, 
-							new SslConnectionFactory(sslContextFactory, "http/1.1"), new HttpConnectionFactory(httpsConfig)); 
+					sslConnector = new ServerConnector(httpBindServer, null, null, null, -1, bindThreads,
+							new SslConnectionFactory(sslContextFactory, "http/1.1"), new HttpConnectionFactory(httpsConfig));
 				}
                 sslConnector.setHost(getBindInterface());
                 sslConnector.setPort(securePort);
@@ -287,7 +300,7 @@ public final class HttpBindManager {
 
     private void configureProxiedConnector(HttpConfiguration httpConfig) {
         // Check to see if we are deployed behind a proxy
-        // Refer to http://docs.codehaus.org/display/JETTY/Configuring+Connectors
+        // Refer to http://eclipse.org/jetty/documentation/current/configuring-connectors.html
         if (isXFFEnabled()) {
         	ForwardedRequestCustomizer customizer = new ForwardedRequestCustomizer();
         	// default: "X-Forwarded-For"
@@ -313,6 +326,7 @@ public final class HttpBindManager {
 
         	httpConfig.addCustomizer(customizer);
         }
+        httpConfig.setRequestHeaderSize(JiveGlobals.getIntProperty(HTTP_BIND_REQUEST_HEADER_SIZE, HTTP_BIND_REQUEST_HEADER_SIZE_DEFAULT));
    }
 
     private String getBindInterface() {
@@ -486,9 +500,6 @@ public final class HttpBindManager {
      * @throws Exception when there is an error configuring the HTTP binding ports.
      */
     public void setHttpBindPorts(int unsecurePort, int securePort) throws Exception {
-        changeHttpBindPorts(unsecurePort, securePort);
-        bindPort = unsecurePort;
-        bindSecurePort = securePort;
         if (unsecurePort != HTTP_BIND_PORT_DEFAULT) {
             JiveGlobals.setProperty(HTTP_BIND_PORT, String.valueOf(unsecurePort));
         }
@@ -503,28 +514,6 @@ public final class HttpBindManager {
         }
     }
 
-    private synchronized void changeHttpBindPorts(int unsecurePort, int securePort)
-            throws Exception {
-        if (unsecurePort < 0 && securePort < 0) {
-            throw new IllegalArgumentException("At least one port must be greater than zero.");
-        }
-        if (unsecurePort == securePort) {
-            throw new IllegalArgumentException("Ports must be distinct.");
-        }
-
-        if (httpBindServer != null) {
-            try {
-                httpBindServer.stop();
-            }
-            catch (Exception e) {
-                Log.error("Error stopping http bind server", e);
-            }
-        }
-
-        configureHttpBindServer(unsecurePort, securePort);
-        httpBindServer.start();
-    }
-
     /**
      * Starts an HTTP Bind server on the specified port and secure port.
      *
@@ -534,7 +523,7 @@ public final class HttpBindManager {
     private synchronized void configureHttpBindServer(int port, int securePort) {
     	// this is the number of threads allocated to each connector/port
     	int bindThreads = JiveGlobals.getIntProperty(HTTP_BIND_THREADS, HTTP_BIND_THREADS_DEFAULT);
-    	
+
         final QueuedThreadPool tp = new QueuedThreadPool();
         tp.setName("Jetty-QTP-BOSH");
 
@@ -557,6 +546,9 @@ public final class HttpBindManager {
             httpBindServer.addConnector(httpsConnector);
         }
 
+        //contexts = new ContextHandlerCollection();
+        // TODO implement a way to get plugins to add their their web services to contexts
+
         createBoshHandler(contexts, "/http-bind");
         createCrossDomainHandler(contexts, "/crossdomain.xml");
         loadStaticDirectory(contexts);
@@ -571,7 +563,7 @@ public final class HttpBindManager {
         ServletContextHandler context = new ServletContextHandler(contexts, boshPath, ServletContextHandler.SESSIONS);
         context.addServlet(new ServletHolder(new HttpBindServlet()),"/*");
         if (isHttpCompressionEnabled()) {
-	        Filter gzipFilter = new GzipFilter() {
+	        Filter gzipFilter = new AsyncGzipFilter() {
 	        	@Override
 	        	public void init(FilterConfig config) throws ServletException {
 	        		super.init(config);
@@ -585,7 +577,7 @@ public final class HttpBindManager {
         }
     }
 
-    // NOTE: disabled by default
+    // NOTE: enabled by default
     private boolean isHttpCompressionEnabled() {
 		return isCompressionEnabled;
 	}
@@ -616,23 +608,10 @@ public final class HttpBindManager {
 
     private void doEnableHttpBind(boolean shouldEnable) {
         if (shouldEnable && httpBindServer == null) {
-            try {
-                changeHttpBindPorts(JiveGlobals.getIntProperty(HTTP_BIND_PORT,
-                        HTTP_BIND_PORT_DEFAULT), JiveGlobals.getIntProperty(HTTP_BIND_SECURE_PORT,
-                        HTTP_BIND_SECURE_PORT_DEFAULT));
-            }
-            catch (Exception e) {
-                Log.error("Error configuring HTTP binding ports", e);
-            }
+            start();
         }
         else if (!shouldEnable && httpBindServer != null) {
-            try {
-                httpBindServer.stop();
-            }
-            catch (Exception e) {
-                Log.error("Error stopping HTTP bind service", e);
-            }
-            httpBindServer = null;
+            stop();
         }
     }
 
@@ -689,41 +668,19 @@ public final class HttpBindManager {
         if (value == bindPort) {
             return;
         }
-        try {
-            changeHttpBindPorts(value, JiveGlobals.getIntProperty(HTTP_BIND_SECURE_PORT,
-                    HTTP_BIND_SECURE_PORT_DEFAULT));
-            bindPort = value;
-        }
-        catch (Exception ex) {
-            Log.error("Error setting HTTP bind ports", ex);
-        }
+        restartServer();
     }
 
     private void setSecureHttpBindPort(int value) {
         if (value == bindSecurePort) {
             return;
         }
-        try {
-            changeHttpBindPorts(JiveGlobals.getIntProperty(HTTP_BIND_PORT,
-                    HTTP_BIND_PORT_DEFAULT), value);
-            bindSecurePort = value;
-        }
-        catch (Exception ex) {
-            Log.error("Error setting HTTP bind ports", ex);
-        }
+        restartServer();
     }
 
     private synchronized void restartServer() {
-        if (httpBindServer != null) {
-            try {
-                httpBindServer.stop();
-            }
-            catch (Exception e) {
-                Log.error("Error stopping http bind server", e);
-            }
-
-            configureHttpBindServer(getHttpBindUnsecurePort(), getHttpBindSecurePort());
-        }
+        stop();
+        start();
     }
 
     /** Listens for changes to Jive properties that affect the HTTP server manager. */
@@ -755,6 +712,9 @@ public final class HttpBindManager {
                 }
                 setSecureHttpBindPort(value);
             }
+            else if (HTTP_BIND_AUTH_PER_CLIENTCERT_POLICY.equalsIgnoreCase( property )) {
+                restartServer();
+            }
         }
 
         public void propertyDeleted(String property, Map<String, Object> params) {
@@ -766,6 +726,9 @@ public final class HttpBindManager {
             }
             else if (property.equalsIgnoreCase(HTTP_BIND_SECURE_PORT)) {
                 setSecureHttpBindPort(HTTP_BIND_SECURE_PORT_DEFAULT);
+            }
+            else if (HTTP_BIND_AUTH_PER_CLIENTCERT_POLICY.equalsIgnoreCase( property )) {
+                restartServer();
             }
         }
 

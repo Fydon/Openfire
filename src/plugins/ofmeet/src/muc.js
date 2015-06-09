@@ -41,7 +41,7 @@ Strophe.addConnectionPlugin('emuc', {
         this.sendPresence();
     },
     doLeave: function() {
-        console.log("do leave", this.myroomjid);
+        //console.log("do leave", this.myroomjid);
         var pres = $pres({to: this.myroomjid, type: 'unavailable' });
         this.presMap.length = 0;
         this.connection.send(pres);
@@ -66,7 +66,7 @@ Strophe.addConnectionPlugin('emuc', {
             var url = presentation.attr('url');
             var current = presentation.find('>current').text();
 
-            console.log('presentation info received from', from, url);
+            //console.log('presentation info received from', from, url);
 
             if (this.preziMap[from] == null) {
                 this.preziMap[from] = url;
@@ -159,7 +159,7 @@ Strophe.addConnectionPlugin('emuc', {
             }
         }
         // Always trigger presence to update bindings
-        console.log('presence change from', from, pres);
+        //console.log('presence change from', from, pres);
         $(document).trigger('presence.muc', [from, member, pres]);
 
         // Trigger status message update
@@ -233,7 +233,7 @@ Strophe.addConnectionPlugin('emuc', {
         var msg = $msg({to: this.roomjid, type: 'groupchat'});
         msg.c('subject', subject);
         this.connection.send(msg);
-        console.log("topic changed to " + subject);
+        //console.log("topic changed to " + subject);
     },
     onMessage: function (msg) {
         // FIXME: this is a hack. but jingle on muc makes nickchanges hard
@@ -254,13 +254,13 @@ Strophe.addConnectionPlugin('emuc', {
             var subjectText = subject.text();
             if(subjectText || subjectText == "") {
                 Chat.chatSetSubject(subjectText);
-                console.log("Subject is changed to " + subjectText);
+                //console.log("Subject is changed to " + subjectText);
             }
         }
 
 
         if (txt) {
-            console.log('chat', nick, txt);
+            //console.log('chat', nick, txt);
             Chat.updateChatConversation(from, nick, txt);
             if(APIConnector.isEnabled() && APIConnector.isEventEnabled("incomingMessage"))
             {
@@ -271,6 +271,7 @@ Strophe.addConnectionPlugin('emuc', {
         }
         return true;
     },
+    
     lockRoom: function (key) {
         //http://xmpp.org/extensions/xep-0045.html#roomconfig
         var ob = this;
@@ -281,20 +282,19 @@ Strophe.addConnectionPlugin('emuc', {
                     formsubmit.c('x', {xmlns: 'jabber:x:data', type: 'submit'});
                     formsubmit.c('field', {'var': 'FORM_TYPE'}).c('value').t('http://jabber.org/protocol/muc#roomconfig').up().up();
                     formsubmit.c('field', {'var': 'muc#roomconfig_roomsecret'}).c('value').t(key).up().up();
-                    // Fixes a bug in prosody 0.9.+ https://code.google.com/p/lxmppd/issues/detail?id=373
-                    formsubmit.c('field', {'var': 'muc#roomconfig_whois'}).c('value').t('anyone').up().up();
-                    // FIXME: is muc#roomconfig_passwordprotectedroom required?
+		    formsubmit.c('field', {'var': 'muc#roomconfig_passwordprotectedroom'}).c('value').t('1').up().up(); 
+		    
                     this.connection.sendIQ(formsubmit,
                         function (res) {
                             // password is required
                             if (sharedKey)
                             {
-                                console.log('set room password');
+                                //console.log('set room password');
                                 Toolbar.lockLockButton();
                             }
                             else
                             {
-                                console.log('removed room password');
+                                //console.log('removed room password');
                                 Toolbar.unlockLockButton();
                             }
                         },
@@ -332,13 +332,19 @@ Strophe.addConnectionPlugin('emuc', {
         this.connection.sendIQ(
                 kickIQ,
                 function (result) {
-                    console.log('Kick participant with jid: ', jid, result);
+                    //console.log('Kick participant with jid: ', jid, result);
                 },
                 function (error) {
-                    console.log('Kick participant error: ', error);
+                    //console.log('Kick participant error: ', error);
                 });
     },
-    sendPresence: function () {
+    sendPresence: function () 
+    {
+	if (!this.presMap['to']) {
+		// Too early to send presence - not initialized
+		return;
+	}
+
         var pres = $pres({to: this.presMap['to'] });
         pres.c('x', {xmlns: this.presMap['xns']});
 

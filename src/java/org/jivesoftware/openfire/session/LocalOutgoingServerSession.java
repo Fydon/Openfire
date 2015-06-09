@@ -58,10 +58,12 @@ import org.slf4j.LoggerFactory;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmpp.packet.IQ;
+import org.xmpp.packet.IQ.Type;
 import org.xmpp.packet.JID;
 import org.xmpp.packet.Message;
 import org.xmpp.packet.Packet;
 import org.xmpp.packet.PacketError;
+import org.xmpp.packet.PacketExtension;
 import org.xmpp.packet.Presence;
 
 import com.jcraft.jzlib.JZlib;
@@ -636,6 +638,9 @@ public class LocalOutgoingServerSession extends LocalServerSession implements Ou
 
     private void returnErrorToSender(Packet packet) {
         RoutingTable routingTable = XMPPServer.getInstance().getRoutingTable();
+        if (packet.getError() != null) {
+            Log.debug("Possible double bounce: " + packet.toXML());
+        }
         try {
             if (packet instanceof IQ) {
             	if (((IQ) packet).isResponse()) {
@@ -647,23 +652,33 @@ public class LocalOutgoingServerSession extends LocalServerSession implements Ou
                 reply.setTo(packet.getFrom());
                 reply.setFrom(packet.getTo());
                 reply.setChildElement(((IQ) packet).getChildElement().createCopy());
+                reply.setType(IQ.Type.error);
                 reply.setError(PacketError.Condition.remote_server_not_found);
                 routingTable.routePacket(reply.getTo(), reply, true);
             }
             else if (packet instanceof Presence) {
+                if (((Presence)packet).getType() == Presence.Type.error) {
+                    Log.debug("Double-bounce of presence: " + packet.toXML());
+                    return;
+                }
                 Presence reply = new Presence();
                 reply.setID(packet.getID());
                 reply.setTo(packet.getFrom());
                 reply.setFrom(packet.getTo());
+                reply.setType(Presence.Type.error);
                 reply.setError(PacketError.Condition.remote_server_not_found);
                 routingTable.routePacket(reply.getTo(), reply, true);
             }
             else if (packet instanceof Message) {
+                if (((Message)packet).getType() == Message.Type.error){
+                    Log.debug("Double-bounce of message: " + packet.toXML());
+                    return;
+                }
                 Message reply = new Message();
                 reply.setID(packet.getID());
                 reply.setTo(packet.getFrom());
                 reply.setFrom(packet.getTo());
-                reply.setType(((Message)packet).getType());
+                reply.setType(Message.Type.error);
                 reply.setThread(((Message)packet).getThread());
                 reply.setError(PacketError.Condition.remote_server_not_found);
                 routingTable.routePacket(reply.getTo(), reply, true);
