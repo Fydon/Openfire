@@ -1,18 +1,23 @@
 Summary: Openfire XMPP Server
 Name: openfire
 Version: %{OPENFIRE_VERSION}
-Release: 1
+Release: %{OPENFIRE_RELEASE}
 BuildRoot: %{_builddir}/%{name}-root
 Source0: %{OPENFIRE_SOURCE}
 %ifnarch noarch
 Source1: %{JRE_BUNDLE}
 %endif
+%ifarch noarch
+# Note that epoch is set here to 1, this appears to be consistent with non-Redhat
+# jres as well due to an ancient problem with java-1.5.0-ibm jpackage RPM
+Requires: java >= 1:1.8.0
+%endif
 Group: Applications/Communications
-Vendor: Jive Software
-Packager: Jive Software
+Vendor: Igniterealtime Community
+Packager: Igniterealtime Community
 License: Apache license v2.0
 AutoReqProv: no
-URL: http://www.igniterealtime.org/
+URL: https://igniterealtime.org/projects/openfire/
 
 %define prefix /opt
 %define homedir %{prefix}/openfire
@@ -25,23 +30,18 @@ Openfire is a leading Open Source, cross-platform IM server based on the
 XMPP (Jabber) protocol. It has great performance, is easy to setup and use,
 and delivers an innovative feature set.
 
-This particular release includes a bundled JRE.
-
 %prep
-%setup -q -n openfire_src
+%setup -q -n openfire
 
 %build
-cd build
-ant openfire
-ant -Dplugin=search plugin
-cd ..
+# Nothing to be done
 
 %install
 # Prep the install location.
 rm -rf $RPM_BUILD_ROOT
 mkdir -p $RPM_BUILD_ROOT%{prefix}
 # Copy over the main install tree.
-cp -R target/openfire $RPM_BUILD_ROOT%{homedir}
+cp -R . $RPM_BUILD_ROOT%{homedir}
 %ifnarch noarch
 # Set up distributed JRE
 pushd $RPM_BUILD_ROOT%{homedir}
@@ -62,8 +62,6 @@ cp -R documentation $RPM_BUILD_ROOT%{homedir}/documentation
 cp changelog.html $RPM_BUILD_ROOT%{homedir}/
 cp LICENSE.html $RPM_BUILD_ROOT%{homedir}/
 cp README.html $RPM_BUILD_ROOT%{homedir}/
-# Copy over the i18n files
-cp -R resources/i18n $RPM_BUILD_ROOT%{homedir}/resources/i18n
 # Make sure scripts are executable
 chmod 755 $RPM_BUILD_ROOT%{homedir}/bin/extra/openfired
 chmod 755 $RPM_BUILD_ROOT%{homedir}/bin/extra/redhat-postinstall.sh
@@ -74,7 +72,6 @@ mv $RPM_BUILD_ROOT%{homedir}/bin/extra/embedded-db-viewer.sh $RPM_BUILD_ROOT%{ho
 rm -rf $RPM_BUILD_ROOT%{homedir}/bin/extra
 rm -f $RPM_BUILD_ROOT%{homedir}/bin/*.bat
 rm -rf $RPM_BUILD_ROOT%{homedir}/resources/nativeAuth/osx-ppc
-rm -rf $RPM_BUILD_ROOT%{homedir}/resources/nativeAuth/solaris-sparc
 rm -rf $RPM_BUILD_ROOT%{homedir}/resources/nativeAuth/win32-x86
 rm -f $RPM_BUILD_ROOT%{homedir}/lib/*.dll
 
@@ -117,7 +114,7 @@ exit 0
 %config(noreplace) %{homedir}/conf/crowd.properties
 %dir %{homedir}/lib
 %{homedir}/lib/*.jar
-%{homedir}/lib/log4j.xml
+%config(noreplace) %{homedir}/lib/log4j2.xml
 %dir %{homedir}/logs
 %dir %{homedir}/plugins
 %{homedir}/plugins/search.jar
@@ -129,12 +126,12 @@ exit 0
 %dir %{homedir}/resources/database/upgrade
 %dir %{homedir}/resources/database/upgrade/*
 %{homedir}/resources/database/upgrade/*/*
-%dir %{homedir}/resources/i18n
-%{homedir}/resources/i18n/*
 %dir %{homedir}/resources/nativeAuth
 %dir %{homedir}/resources/nativeAuth/linux-i386
 %{homedir}/resources/nativeAuth/linux-i386/*
 %dir %{homedir}/resources/security
+%dir %{homedir}/resources/security/archive
+%{homedir}/resources/security/archive/readme.txt
 %dir %{homedir}/resources/spank
 %{homedir}/resources/spank/index.html
 %dir %{homedir}/resources/spank/WEB-INF
@@ -153,5 +150,5 @@ exit 0
 %endif
 
 %changelog
-* %{OPENFIRE_BUILDDATE} Jive Software <webmaster@jivesoftware.com> %{OPENFIRE_VERSION}-1
-- Automatic RPM build.
+* %{OPENFIRE_BUILDDATE} Igniterealtime Community <webmaster@igniterealtime.org> %{OPENFIRE_VERSION}-%{OPENFIRE_RELEASE}
+- Automated RPM build with git rev-parse --short HEAD of %{OPENFIRE_REPOVERSION}
